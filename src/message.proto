@@ -11,7 +11,8 @@ enum State {
 	starting = 0;
 	playing = 1;
 	paused = 2;
-	stopped = 3;
+	counting = 3;
+	stopped = 4;
 }
 
 enum WhoFirst {
