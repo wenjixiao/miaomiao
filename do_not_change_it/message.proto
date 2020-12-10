@@ -1,0 +1,29 @@
+syntax="proto3";
+
+//------------------------------------------------
+
+enum MsgType {
+    TLogin = 0;
+    TLoginOk = 1;
+    TLoginFail = 2;
+}
+
+//------------------------------------------------
+
+message Msg{
+    MsgType type = 1;
+    oneof union {
+        Login login = 2;
+        LoginOk login_ok = 3;
+        LoginFail login_fail = 4;
+    }
+}
+
+message Login {
+    string name = 1;
+}
+
+message LoginOk{
+}
+
+message LoginFail{}
