@@ -100,7 +100,7 @@ class LineBrokenManager:
 		users_manager.remove_user(user)
 		self.broken_users.append(user)
 		
-		for game in msgserver.live_id_games.values():
+		for game in games_manager.get_live_games():
 			game_users = game.users
 			#as player
 			if user in game_users:
@@ -135,7 +135,7 @@ class LineBrokenManager:
 		self.broken_users.remove(user)
 		self.broken_timer.remove_user(user)
 		
-		for game in msgserver.live_id_games.values():
+		for game in games_manager.get_live_games():
 			game_users = game.users
 			if user in game_users:
 				# first,give the game data to the comeback user
@@ -179,7 +179,10 @@ class GamesManager:
 	def __init__(self):
 		self.live_id_games = {}
 		self.dead_id_games = {}
-	
+		
+	def get_live_games(self):
+		return self.live_id_games.values()
+		
 	def end_game(self,game,result):
 		game.state = message.State.stopped
 		game.result.CopyFrom(result)
@@ -192,7 +195,7 @@ class GamesManager:
 		del self.live_id_games[game.id]
 		self.dead_id_games[game.id] = game
 		# tell broken timer,the game is dead
-		broken_manager.broken_timer.game_over(game)
+		line_broken_manager.broken_timer.game_over(game)
 		
 		users_manager.send_users_msg(game.users,msg)
 		users_manager.send_users_msg(game.watchers,msg)
@@ -209,7 +212,7 @@ class MsgServerProtocol(msgprotocol.MsgProtocol):
         if exc is not None:
         	logging.info("---exit EXCEPTION---")
 			if self.user is not None:
-				linebroken.user_line_broken(user)
+				line_broken_manager.user_line_broken(user)
     # override
     def process_msg(self,msg):
         logging.debug(msg)
@@ -220,14 +223,11 @@ class MsgServerProtocol(msgprotocol.MsgProtocol):
             if user is not None:
             	# found the user from users db
                 logging.debug("---login ok!---")
-        		# tag protocol,who am i        
-                self.user = user
-                # global manage protocols
-                username_protocols[self.user.name] = protocol
+        		users_manager.add_user(user,self)
                 #if i am line broken
-                if user in broken_users:
-                	linebroken.user_come_back(user)
-                #-----------------------------------
+                if line_broken_manager.is_user_broken(user):
+                	line_broken_manager.user_come_back(user)
+                	
                 msg = message.Msg()
                 msg.type = message.MsgType.TLoginOk
                 self.send_msg(msg)
@@ -253,6 +253,7 @@ async def main():
 if __name__ == '__main__':
 	users_manager = UsersManager()
 	games_manager = GamesManager()
-	broken_manager = LineBrokenManager()
+	line_broken_manager = LineBrokenManager()
+	dead_manager = DeadManager()
 
 	asyncio.run(main())

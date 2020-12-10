@@ -23,20 +23,20 @@ class Dead:
 # -----------------------------------------------------------------------------		
 class DeadManager:
 	def __init__(self):
-		self.gameid_deads = {}
+		self.id_deads = {}
 		
 	def new_dead(self,game):
-		self.gameid_deads[game.id] = Dead()
+		self.id_deads[game.id] = Dead()
 		
 	def remove_dead(self,game):
-		self.gameid_deads[game.id]
+		self.id_deads[game.id]
 		
 	def add_stones(self,game,color,stones):
-		dead = self.gameid_deads[game.id]
+		dead = self.id_deads[game.id]
 		dead.add(color,stones)
 		
 	def is_dead_ok(self,game):
-		dead = self.gameid_deads[game.id]
+		dead = self.id_deads[game.id]
 		return dead.is_ok()
 # -----------------------------------------------------------------------------
 class BrokenTimer:
@@ -100,7 +100,7 @@ class LineBrokenManager:
 		users_manager.remove_user(user)
 		self.broken_users.append(user)
 		
-		for game in games_manager.get_live_games():
+		for game in games_manager.get_user_games():
 			game_users = game.users
 			#as player
 			if user in game_users:
@@ -135,8 +135,9 @@ class LineBrokenManager:
 		self.broken_users.remove(user)
 		self.broken_timer.remove_user(user)
 		
-		for game in games_manager.get_live_games():
+		for game in games_manager.get_user_games():
 			game_users = game.users
+			# as player
 			if user in game_users:
 				# first,give the game data to the comeback user
 				msg = message.Msg()
@@ -179,9 +180,19 @@ class GamesManager:
 	def __init__(self):
 		self.live_id_games = {}
 		self.dead_id_games = {}
+		# include as a player or as a watcher
+		self.username_games = {}
 		
 	def get_live_games(self):
 		return self.live_id_games.values()
+		
+	def get_user_games(self,user):
+		return self.username_games[user.name]
+		
+	def remove_username_game(self,game):
+		for username in [user.name for user in game.users]:
+			#if username in self.username_games.keys():
+			del self.username_games[username]
 		
 	def end_game(self,game,result):
 		game.state = message.State.stopped
