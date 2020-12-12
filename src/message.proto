@@ -66,11 +66,11 @@ message Game {
     bool line_broken = 10;
     Rule rule = 2;
     Result result = 3;
-    repeated Stone stones = 4;
-    repeated User users = 5;
+    repeated User players = 5;
+    repeated User watchers = 8;
     repeated Color colors = 6;
     repeated Clock clockes = 7;
-    repeated User watchers = 8;
+    repeated Stone stones = 4;
 }
 
 //------------------------------------------------
@@ -135,6 +135,7 @@ message ComeBack {
 message Countdown {
 	int32 game_id = 1;
 	User user = 2;
+	int32 timeout = 3;
 }
 
 message GameData {

@@ -3,6 +3,7 @@ import logging
 import message_pb2 as message
 import msgprotocol
 import msgdb
+from data_model import User,Game
 
 logging.basicConfig(level = logging.DEBUG)
 # -----------------------------------------------------------------------------
@@ -40,7 +41,8 @@ class DeadManager:
 		return dead.is_ok()
 # -----------------------------------------------------------------------------
 class BrokenTimer:
-	timeout = 10
+    # when line broken,we wait for him 5 minutes
+	timeout = 60*5
 	def __init__(self):
 		self.timer_running = False
 		self.game_user_timeout = []
@@ -48,8 +50,9 @@ class BrokenTimer:
 	def add_game_user(self,game,user):
 		self.game_user_timeout.append((game,user,timeout))
 		if not self.timer_running:
-			self.start_timer(1)
-		
+            now_loop = asyncio.get_running_loop()
+            asyncio.run_coroutine_threadsafe(self.start_timer(1),now_loop)
+            
 	def remove_user(self,user):
 		self.game_user_timeout = filter(lambda u,_,_ : u != user, self.game_user_timeout)
 	
@@ -59,11 +62,12 @@ class BrokenTimer:
 	def countdown(self):
 		gu = map(lambda g,u,t : (g,u,t-1),self.game_user_timeout)
 		self.game_user_timeout = filter(lambda g,u,t : t > 0,gu)
-		for game,user,t in self.game_user_timeout:
+		for game,user,timeout in self.game_user_timeout:
 			msg = message.Msg()
 			msg.type = message.MsgType.TCountdown
 			msg.countdown.game_id = game.id
 			msg.countdown.user = user
+			msg.countdown.timeout = timeout
 			users_manager.send_user_msg(user,msg)
 			users_manager.send_users_msg(game.watchers,msg)
 		for game,user,_ in filter(lambda g,u,t: t <= 0,gu):
@@ -100,11 +104,10 @@ class LineBrokenManager:
 		users_manager.remove_user(user)
 		self.broken_users.append(user)
 		
-		for game in games_manager.get_user_games():
-			game_users = game.users
+		for game in user.games:
 			#as player
-			if user in game_users:
-				other_user = game_other_user(game_users,user)
+			if user in game.players:
+				other_user = game_other_user(game.players,user)
 				if not self.is_user_broken(other_user):
 					if not game.line_broken:
 						game.line_broken = True
@@ -127,26 +130,29 @@ class LineBrokenManager:
 				msg.type = message.MsgType.TWatcherLeave
 				msg.watcher_leave.game_id = game.id
 				msg.watcher_leave.user = user
-				users_manager.send_users_msg(game.users + game.watchers,msg)
+				users_manager.send_users_msg(game.players + game.watchers,msg)
 				
 	def user_come_back(self,user):
 		# line broken user come back.
 		# some game paused for the user line broken,we should rerun it
+		assert user in self.broken_users
+		index = self.broken_users.index(user)
+		myuser = self.broken_users[index] # myuser have games
+		user.games = myuser.games
+		
 		self.broken_users.remove(user)
 		self.broken_timer.remove_user(user)
 		
-		for game in games_manager.get_user_games():
-			game_users = game.users
+		for game in user.games:
 			# as player
-			if user in game_users:
+			if user in game.players:
 				# first,give the game data to the comeback user
 				msg = message.Msg()
 				msg.type = message.MsgType.TGameData
 				msg.game_data.game = game
-				# now,the game is linebroken!
 				users_manager.send_user_msg(user,msg)
 				# can we restart the game? it's about other_user
-				other_user = msgserver.game_other_user(game_users,user)
+				other_user = msgserver.game_other_user(game.players,user)
 				if not self.is_user_broken(other_user):
 					# i come back,and you not line broken,so we can start again
 					assert game.line_broken == True
@@ -154,61 +160,64 @@ class LineBrokenManager:
 					msg = message.Msg()
 					msg.type = message.MsgType.TComeBack
 					msg.come_back.game_id = game.id
-					users_manager.send_users_msg(game_users,msg)
+					users_manager.send_users_msg(game.players,msg)
 				else:
 					# means other_user linebroken too,and not login now. nothing to do!
 					pass
 # -----------------------------------------------------------------------------
 class UsersManager:
 	def __init__(self):
-		self.username_protocols = {}
+		self.user_protocol = {}
 	
 	def add_user(self,user,protocol):
 		protocol.user = user
-		self.username_protocols[user.name] = protocol
+		self.user_protocol[user] = protocol
 	
 	def remove_user(self,user):
-		del self.username_protocols[user.name]
+		del self.user_protocol[user]
 
 	def send_user_msg(self,user,msg):
-		self.username_protocols[user.name].send_msg(msg)
+		self.user_protocol[user].send_msg(msg)
 	
 	def send_users_msg(self,users,msg):
 		map(lambda user: self.send_user_msg(user,msg),users)
 # -----------------------------------------------------------------------------
 class GamesManager:
 	def __init__(self):
-		self.live_id_games = {}
-		self.dead_id_games = {}
-		# include as a player or as a watcher
-		self.username_games = {}
+		self.live_games = []
+		self.dead_games = []
 		
-	def get_live_games(self):
-		return self.live_id_games.values()
-		
-	def get_user_games(self,user):
-		return self.username_games[user.name]
-		
-	def remove_username_game(self,game):
-		for username in [user.name for user in game.users]:
-			#if username in self.username_games.keys():
-			del self.username_games[username]
-		
+	def create_game(self,rule,user1,user2):
+        game = Game()
+        game.state = message.State.starting
+        game.line_broken = False
+        game.rule.CopyFrom(rule)
+        u1 = User.unpack(user1)
+        u2 = User.unpack(user2)
+        u1.add_game(game)
+        u2.add_game(game)
+        game.players.append(u1)
+        game.players.append(u2)
+        return game
+	
 	def end_game(self,game,result):
 		game.state = message.State.stopped
 		game.result.CopyFrom(result)
+		
+		for user in game.players:
+		    user.remove(game)
 		
 		msg = message.Msg()
 		msg.type = message.MsgType.TGameOver
 		msg.game_over.game_id = game.id
 		msg.game_over.result.CopyFrom(result)
 		
-		del self.live_id_games[game.id]
-		self.dead_id_games[game.id] = game
+		self.live_games.remove(game)
+		self.dead_games.append(game)
 		# tell broken timer,the game is dead
 		line_broken_manager.broken_timer.game_over(game)
 		
-		users_manager.send_users_msg(game.users,msg)
+		users_manager.send_users_msg(game.players,msg)
 		users_manager.send_users_msg(game.watchers,msg)
 # -----------------------------------------------------------------------------
 class MsgServerProtocol(msgprotocol.MsgProtocol):

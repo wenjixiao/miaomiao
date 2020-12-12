@@ -35,7 +35,7 @@ class Game(Packer):
         self.result = None
         self.stones = []
         self.watchers = []
-        self.users = []
+        self.players = []
         self.colors = []
         self.clocks = []
     
@@ -49,8 +49,8 @@ class Game(Packer):
             packed_game.stones.add().CopyFrom(stone)
         for watcher in self.watchers:
             packed_game.watchers.add().CopyFrom(watcher.pack())
-        for user in self.users:
-            packed_game.users.add().CopyFrom(user.pack())
+        for user in self.players:
+            packed_game.players.add().CopyFrom(user.pack())
         for color in self.colors:
             packed_game.colors.add() = color
         for clock in self.clocks:
@@ -67,8 +67,8 @@ class Game(Packer):
             game.stones.append(stone)
         for watcher in packed.watchers:
             game.watchers.append(User.unpack(watcher))
-        for user in packed.users:
-            game.users.append(User.unpack(user))
+        for user in packed.players:
+            game.players.append(User.unpack(user))
         for color in packed.colors:
             game.colors.append(color)
         for clock in packed.clocks:
@@ -79,6 +79,13 @@ class User(Packer):
     def __init__(self,name,level):
         self.name = name
         self.level = level
+        self.games = []
+        
+    def remove_game(self,game):
+        self.games.remove(game)
+        
+    def add_game(self,game):
+        self.games.append(game)
         
     def __hash__(self):                                                    
         return hash(self.name)
