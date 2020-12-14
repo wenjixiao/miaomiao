@@ -48,7 +48,7 @@ class BrokenTimer:
 		self.game_user_timeout = []
 		
 	def add_game_user(self,game,user):
-		self.game_user_timeout.append((game,user,timeout))
+		self.game_user_timeout.append((game,user,BrokenTimer.timeout))
 		if not self.timer_running:
             now_loop = asyncio.get_running_loop()
             asyncio.run_coroutine_threadsafe(self.start_timer(1),now_loop)
@@ -188,34 +188,32 @@ class GamesManager:
 		self.dead_games = []
 		
 	def create_game(self,rule,user1,user2):
-        game = Game()
-        game.state = message.State.starting
-        game.line_broken = False
-        game.rule.CopyFrom(rule)
-        u1 = User.unpack(user1)
-        u2 = User.unpack(user2)
-        u1.add_game(game)
-        u2.add_game(game)
-        game.players.append(u1)
-        game.players.append(u2)
+        game = Game(rule,user1,user2)
+        
+        self.live_games.append(game)
+        
+        msg = message.Msg()
+        msg.type = message.MsgType.TGameData
+        msg.game_data.game = game
+        users_manager.send_user_msg(game.players,msg)
+        
         return game
 	
 	def end_game(self,game,result):
-		game.state = message.State.stopped
-		game.result.CopyFrom(result)
+	    game.game_over(result)
 		
 		for user in game.players:
 		    user.remove(game)
-		
-		msg = message.Msg()
-		msg.type = message.MsgType.TGameOver
-		msg.game_over.game_id = game.id
-		msg.game_over.result.CopyFrom(result)
 		
 		self.live_games.remove(game)
 		self.dead_games.append(game)
 		# tell broken timer,the game is dead
 		line_broken_manager.broken_timer.game_over(game)
+		
+		msg = message.Msg()
+		msg.type = message.MsgType.TGameOver
+		msg.game_over.game_id = game.id
+		msg.game_over.result.CopyFrom(result)
 		
 		users_manager.send_users_msg(game.players,msg)
 		users_manager.send_users_msg(game.watchers,msg)

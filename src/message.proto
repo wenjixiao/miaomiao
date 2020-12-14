@@ -8,11 +8,10 @@ enum Color {
 }
 
 enum State {
-	starting = 0;
-	playing = 1;
-	paused = 2;
-	counting = 3;
-	stopped = 4;
+	playing = 0;
+	paused = 1;
+	computing = 2;
+	stopped = 3;
 }
 
 enum WhoFirst {
@@ -43,7 +42,7 @@ message Stone {
 
 message Clock {
     int32 seconds = 1;
-    int32 counting = 2;
+    int32 countdown = 2;
     int32 times = 3;
     int32 every_time = 4;
 }
@@ -53,6 +52,7 @@ message Rule {
 	WhoFirst who_first = 2;
 	float komi = 3;
 	Clock clock = 4;
+	User first_user = 5;
 }
 
 message User {
@@ -66,11 +66,12 @@ message Game {
     bool line_broken = 10;
     Rule rule = 2;
     Result result = 3;
-    repeated User players = 5;
-    repeated User watchers = 8;
-    repeated Color colors = 6;
-    repeated Clock clockes = 7;
     repeated Stone stones = 4;
+    repeated User watchers = 8;
+    repeated User players = 5;
+    repeated Color colors = 11;
+    repeated Clock clocks = 12;
+    repeated Stone removed_stones = 13;
 }
 
 //------------------------------------------------
@@ -103,7 +104,7 @@ message Msg{
         Countdown countdown = 7;
         GameData game_data = 10;
         StateChange state_change = 11;
-        WatcherLeave watcher_leave = 12;
+        WatcherLeave watcher_leave = 8;
         GameOver game_over = 13;
     }
 }
